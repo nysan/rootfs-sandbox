@@ -166,7 +166,7 @@ export SCRIPTS="${IMAGE_ROOTFS}-tmp/scripts"
 
 # Use targets "special" update-rc.d + shadow utils + makedevs
 export PATH="${SCRIPTS}:${OECORE_NATIVE_SYSROOT}/usr/sbin:${OECORE_TARGET_SYSROOT}/usr/sbin:${PATH}"
-export PATH="$ORIGDIR:${PATH}" # FIXME REMOVE
+
 export PSEUDO_LOCALSTATEDIR="${IMAGE_ROOTFS}-tmp/var/lib/pseudo"
 
 # Needed for SDKs update-alternatives
