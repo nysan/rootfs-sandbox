@@ -43,12 +43,32 @@ export FAKEROOT="pseudo"
 
 DEVTABLE="${OECORE_NATIVE_SYSROOT}/usr/share/device_table-minimal.txt"
 ORIGDIR=$(pwd)
-
-export OPKG_CONFFILE="${OECORE_TARGET_SYSROOT}/etc/opkg.conf"
+rpmlibdir="/var/lib/rpm"
 
 ### Define helper functions ###
 create_scripts()
 {
+	cat << EOF > ${SCRIPTS}/scriptlet_wrapper
+#!/bin/bash
+
+\$2 \$1/\$3 \$4
+if [ \$? -ne 0 ]; then
+  if [ \$4 -eq 1 ]; then
+    mkdir -p \$1/etc/rpm-postinsts
+    num=100
+    while [ -e \$1/etc/rpm-postinsts/\${num}-* ]; do num=\$((num + 1)); done
+    name=\`head -1 \$1/\$3 | cut -d' ' -f 2\`
+    echo "#!\$2" > \$1/etc/rpm-postinsts/\${num}-\${name}
+    echo "# Arg: \$4" >> \$1/etc/rpm-postinsts/\${num}-\${name}
+    cat \$1/\$3 >> \$1/etc/rpm-postinsts/\${num}-\${name}
+    chmod +x \$1/etc/rpm-postinsts/\${num}-\${name}
+  else
+    echo "Error: pre/post remove scriptlet failed"
+  fi
+fi
+EOF
+
+
 # Create devmodwrapper dummy script
     if [ ! -f ${SCRIPTS}/depmodwrapper ] ; then
 	cat > ${SCRIPTS}/depmodwrapper << EOF
@@ -134,7 +154,7 @@ if [ $# = 0 ]; then
     exit 1
 fi 
 
-while getopts "h?r:f:d:p:" opt; do
+while getopts "h?r:f:d:p:a:" opt; do
     case "$opt" in
     h|\?)
         show_help
@@ -146,11 +166,16 @@ while getopts "h?r:f:d:p:" opt; do
         ;;
     d)  DEVTABLE=$OPTARG
         ;;
+    a)  REPO_URL=${OPTARG%/}
+        ;;
     p)  
-        if [ "$OPTARG" != "ipk" ]; then
-	    echo "Only ipk supported sofar"
+        if [ "$OPTARG" = "deb" ]; then
+	    echo "Only ipk & rpm supported sofar"
 	    exit
-	else
+	elif [ "$OPTARG" = "rpm" ]; then
+	    export PMS="rpm"
+	    export PMC="smart"
+	elif [ "$OPTARG" = "ipk" ]; then
 	    export PMS="ipk"
 	    export PMC="opkg-cl"
 	fi
@@ -166,13 +191,13 @@ export SCRIPTS="${IMAGE_ROOTFS}-tmp/scripts"
 
 # Use targets "special" update-rc.d + shadow utils + makedevs
 export PATH="${SCRIPTS}:${OECORE_NATIVE_SYSROOT}/usr/sbin:${OECORE_TARGET_SYSROOT}/usr/sbin:${PATH}"
+export PATH="${OECORE_NATIVE_SYSROOT}/sbin:${PATH}"
 
 export PSEUDO_LOCALSTATEDIR="${IMAGE_ROOTFS}-tmp/var/lib/pseudo"
 
 # Needed for SDKs update-alternatives
 export OPKG_OFFLINE_ROOT="${IMAGE_ROOTFS}"
 export OPKG_CONFDIR_TARGET="${IMAGE_ROOTFS}/etc/opkg"
-export OFLAGS="--force-postinstall --prefer-arch-to-version -t ${OPKG_TMP_DIR} -f ${OPKG_CONFFILE} -o ${IMAGE_ROOTFS}"
 
 # Needed for update-rc.d and many others
 export D="${IMAGE_ROOTFS}"
@@ -182,6 +207,13 @@ export OFFLINE_ROOT="${IMAGE_ROOTFS}"
 export IPKG_OFFLINE_ROOT="${IMAGE_ROOTFS}"
 
 ### END ENV ###
+#TEMPDIR=`mktemp -d`
+#wget -q -O $TEMPDIR/tmp $REPO_URL/?C=M;O=D
+#for repo in $(list_urls.sed $TEMPDIR/tmp | grep  '^[A-Za-z]'); do
+#    
+#
+#done
+
 mkdir -p ${SCRIPTS}
 create_scripts
 
@@ -190,8 +222,76 @@ ${FAKEROOT} -d
 echo "Installing initial /dev directory"
 
 ${FAKEROOT} mkdir -p ${IMAGE_ROOTFS}/dev
+${FAKEROOT} mkdir -p ${IMAGE_ROOTFS}/etc/opkg/arch
+${FAKEROOT} mkdir -p ${IMAGE_ROOTFS}/etc/rpm
+${FAKEROOT} mkdir -p ${IMAGE_ROOTFS}/install/tmp
+
 ${FAKEROOT} mkdir -p ${IMAGE_ROOTFS}/var/lib/opkg
 ${FAKEROOT} mkdir -p ${OPKG_TMP_DIR}/var/lib/pseudo
+
+if [ "$PMS" = "rpm" ]; then
+    
+    ${FAKEROOT} mkdir -p ${IMAGE_ROOTFS}/etc/rpm/sysinfo
+    ${FAKEROOT} echo "/" >${IMAGE_ROOTFS}/etc/rpm/sysinfo/Dirnames
+    ${FAKEROOT} mkdir -p ${IMAGE_ROOTFS}/$rpmlibdir
+    ${FAKEROOT} mkdir -p ${IMAGE_ROOTFS}/$rpmlibdir/log
+
+    # After change the __db.* cache size, log file will not be generated automatically,
+    # that will raise some warnings, so touch a bare log for rpm write into it.
+    ${FAKEROOT} touch ${IMAGE_ROOTFS}/$rpmlibdir/log/log.0000000001
+    if [ ! -e ${IMAGE_ROOTFS}/$rpmlibdir/DB_CONFIG ]; then
+        ${FAKEROOT} cat > ${IMAGE_ROOTFS}/$rpmlibdir/DB_CONFIG << EOF
+# ================ Environment
+set_data_dir .
+set_create_dir .
+set_lg_dir ./log
+set_tmp_dir ./tmp
+set_flags db_log_autoremove on
+
+# -- thread_count must be >= 8
+set_thread_count 64
+
+# ================ Logging
+
+# ================ Memory Pool
+set_cachesize 0 1048576 0
+set_mp_mmapsize 268435456
+
+# ================ Locking
+set_lk_max_locks 16384
+set_lk_max_lockers 16384
+set_lk_max_objects 16384
+ mutex_set_max 163840
+
+# ================ Replication
+EOF
+    fi	
+    export OFLAGS="--data-dir=${IMAGE_ROOTFS}/var/lib/smart"
+  # Create database so that smart doesn't complain (lazy init)
+  ${FAKEROOT} rpm --root ${IMAGE_ROOTFS} --dbpath $rpmlibdir -qa > /dev/null
+  ${FAKEROOT} $PMC ${OFLAGS} config --set rpm-root=${IMAGE_ROOTFS}
+  ${FAKEROOT} $PMC ${OFLAGS} config --set rpm-dbpath=$rpmlibdir
+  ${FAKEROOT} $PMC ${OFLAGS} config --set rpm-extra-macros._var=/var
+  ${FAKEROOT} $PMC ${OFLAGS} config --set rpm-extra-macros._tmppath=/install/tmp
+  # Write common configuration for host and target usage
+  ${FAKEROOT} $PMC ${OFLAGS} config --set rpm-nolinktos=1
+  ${FAKEROOT} $PMC ${OFLAGS} config --set rpm-noparentdirs=1
+  ${FAKEROOT} $PMC ${OFLAGS} config --set ignore-all-recommends=1
+  ${FAKEROOT} $PMC ${OFLAGS} channel -y --add rpmsys type=rpm-sys name="Local RPM Database"
+  ${FAKEROOT} $PMC ${OFLAGS} config --set rpm-extra-macros._cross_scriptlet_wrapper=${SCRIPTS}/scriptlet_wrapper
+
+  export RPM_ETCRPM=${IMAGE_ROOTFS}/etc/rpm
+
+elif [ "$PMS" = "ipk" ]; then
+  if [ -z $OPKG_CONFFILE ]; then
+      export OPKG_CONFFILE="${IMAGE_ROOTFS}/etc/opkg.conf"
+  fi
+  if [ ! -f $OPKG_CONFFILE ]; then
+      echo "dest root /" > $OPKG_CONFFILE
+      echo "lists_dir ext /var/lib/opkg" >> $OPKG_CONFFILE 
+  fi
+  export OFLAGS="--force-postinstall --prefer-arch-to-version -t ${OPKG_TMP_DIR} -f ${OPKG_CONFFILE} -o ${IMAGE_ROOTFS}"
+fi
 
 command -v makedevs >/dev/null 2>&1 || { echo "Cant find 'makedevs' in PATH. Aborting." >&2; exit 1; }
 
@@ -200,50 +300,74 @@ set +e
 ${FAKEROOT} makedevs -r ${IMAGE_ROOTFS} -D $DEVTABLE
 
 cd ${IMAGE_ROOTFS};
-${FAKEROOT} $PMC ${OFLAGS} update
-${FAKEROOT} $PMC ${OFLAGS} install packagegroup-core-boot
-${FAKEROOT} $PMC ${OFLAGS} install opkg opkg-collateral
+#${FAKEROOT} $PMC ${OFLAGS} update
+#${FAKEROOT} $PMC ${OFLAGS} install packagegroup-core-boot
+#${FAKEROOT} $PMC ${OFLAGS} install opkg opkg-collateral
 
-# Install run-postinsts for failing pre/post hooks
-${FAKEROOT} $PMC ${OFLAGS} install run-postinsts
 set -e
 cat << EOF
 
- Welcome to interactive image creation sandbox
- You are now "root".
+Welcome to interactive image creation sandbox
+You are now "root".
 
- Already done for your conveniece:
- # $PMC \${OFLAGS} update
- # $PMC \${OFLAGS} install packagegroup-core-boot
+NOTE: Setup environment you environment first.
+---
+alias $PMC='$PMC \${OFLAGS}'
 
- Example usecases:
+How to Setup repositories (Only needed first time):
+--- 
+RPM: smartpm
+smart channel -y --add all type=rpm-md baseurl=http://downloads.yoctoproject.org/releases/yocto/yocto-1.4.2/rpm/all
+smart channel -y --add x86_64 type=rpm-md baseurl=http://downloads.yoctoproject.org/releases/yocto/yocto-1.4.2/rpm/x86_64
+smart channel -y --add qemux86_64 type=rpm-md baseurl=http://downloads.yoctoproject.org/releases/yocto/yocto-1.4.2/rpm/qemux86_64
+smart channel -y --set all priority=1
+smart channel -y --set x86_64 priority=16
+smart channel -y --set qemux86_64 priority=21
 
- 0. Setup environment:
- # alias $PMC='$PMC \${OFLAGS}'
 
- 1. Install a new package: 
- # $PMC install gcc
+IPK: opkg-cl
+echo "src/gz all http://downloads.yoctoproject.org/releases/yocto/yocto-1.4.2/ipk/all" > \
+${OPKG_CONFFILE}
+echo "src/gz x86_64 http://downloads.yoctoproject.org/releases/yocto/yocto-1.4.2/ipk/x86_64" >> \
+${OPKG_CONFFILE}
+echo "src/gz qemux86_64 http://downloads.yoctoproject.org/releases/yocto/yocto-1.4.2/ipk/qemux86_64" >> \
+${OPKG_CONFFILE}
+echo "arch all 1" >> ${OPKG_CONFFILE}
+echo "arch any 6" >> ${OPKG_CONFFILE}
+echo "arch noarch 11" >> ${OPKG_CONFFILE}
+echo "arch x86_64 16" >> ${OPKG_CONFFILE}
+echo "arch qemux86_64 21" >> ${OPKG_CONFFILE}
 
- 2. Install your own stuff:
- # cd <source>; make install DESTDIR=\${IMAGE_ROOTFS}
+DEB: TBD
 
- 3. When done, create a tarball or ext2 FS
- # do_tar.sh ~/my_rootfs
- # do_ext2.sh ~/my_rootfs
+Example usecases:
 
- 4. Run with a different kernel
- # cd <kernel_dir>
- # INSTALL_MOD_PATH=${IMAGE_ROOTFS} make modules_install
- # INSTALL_MOD_PATH=${IMAGE_ROOTFS} make firmware_install
- # do_ext2.sh ~/nameX
- # exit
- # kvm  -hda /home/dany/nameX.ext2 -kernel <kernel_dir>/arch/x86/boot/bzImage \
- -nographic -smp 1 -append " console=ttyS0 earlyprintk=serial  root=/dev/sda rw"
+1. Install new packages: 
+# $PMC install packagegroup-core-boot gcc
+
+2. Install your own stuff:
+# cd <source>; make install DESTDIR=\${IMAGE_ROOTFS}
+
+3. When done, create a tarball or ext2 FS
+# do_tar.sh ~/my_rootfs
+# do_ext2.sh ~/my_rootfs
+
+4. Run with a different kernel
+# cd <kernel_dir>
+# INSTALL_MOD_PATH=${IMAGE_ROOTFS} make modules_install
+# INSTALL_MOD_PATH=${IMAGE_ROOTFS} make firmware_install
+# do_ext2.sh ~/nameX
+# exit
+# kvm  -hda /home/dany/nameX.ext2 -kernel <kernel_dir>/arch/x86/boot/bzImage \
+-nographic -smp 1 -append " console=ttyS0 earlyprintk=serial  root=/dev/sda rw"
 
 EOF
 
 # Spawn the fakeroot
 ${FAKEROOT} /bin/bash
+
+# Install run-postinsts for failing pre/post hooks
+${FAKEROOT} $PMC ${OFLAGS} install run-postinsts
 
 # Base time
 ${FAKEROOT} date "+%m%d%H%M%Y" > ${IMAGE_ROOTFS}/etc/timestamp
