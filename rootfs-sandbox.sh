@@ -18,7 +18,7 @@
 # meta-toolchain SDK tarball provided with a OE based distro. 
 
 # TODO : 
-# 1: Allow sandbox usage of rpm and deb PMS
+# 1: Allow sandbox usage of deb PMS
 # 2: do_vmdk, do_ext3 ?
 # 3: Automate the alias opkg-cl ${OFLAGS}
 # 4: Fix INTERCEPT_DIR functionality.
@@ -41,6 +41,8 @@ export PSEUDO_UNLOAD=0
 export PSEUDO_DEBUG=0
 export FAKEROOT="pseudo"
 
+export PYTHONIOENCODING="UTF-8"
+
 DEVTABLE="${OECORE_NATIVE_SYSROOT}/usr/share/device_table-minimal.txt"
 ORIGDIR=$(pwd)
 rpmlibdir="/var/lib/rpm"
@@ -49,7 +51,16 @@ rpmlibdir="/var/lib/rpm"
 create_scripts()
 {
 	cat << EOF > ${SCRIPTS}/scriptlet_wrapper
-#!/bin/bash
+#!/bin/sh
+
+export PATH="${PATH}"
+export D="${IMAGE_ROOTFS}"
+export OFFLINE_ROOT="\$D"
+export IPKG_OFFLINE_ROOT="\$D"
+export OPKG_OFFLINE_ROOT="\$D"
+export INTERCEPT_DIR="${INTERCEPT_DIR}"
+export NATIVE_ROOT=${OECORE_NATIVE_SYSROOT}
+export PYTHONIOENCODING="UTF-8"
 
 \$2 \$1/\$3 \$4
 if [ \$? -ne 0 ]; then
@@ -67,7 +78,7 @@ if [ \$? -ne 0 ]; then
   fi
 fi
 EOF
-
+	chmod 755 ${SCRIPTS}/scriptlet_wrapper
 
 # Create devmodwrapper dummy script
     if [ ! -f ${SCRIPTS}/depmodwrapper ] ; then
@@ -192,6 +203,8 @@ export SCRIPTS="${IMAGE_ROOTFS}-tmp/scripts"
 # Use targets "special" update-rc.d + shadow utils + makedevs
 export PATH="${SCRIPTS}:${OECORE_NATIVE_SYSROOT}/usr/sbin:${OECORE_TARGET_SYSROOT}/usr/sbin:${PATH}"
 export PATH="${OECORE_NATIVE_SYSROOT}/sbin:${PATH}"
+#python path
+export PATH="${OECORE_NATIVE_SYSROOT}/usr/bin:${PATH}"
 
 export PSEUDO_LOCALSTATEDIR="${IMAGE_ROOTFS}-tmp/var/lib/pseudo"
 
@@ -215,6 +228,20 @@ export IPKG_OFFLINE_ROOT="${IMAGE_ROOTFS}"
 #done
 
 mkdir -p ${SCRIPTS}
+
+if [ "$PMS" = "rpm" ]; then
+    export OFLAGS="--data-dir=${IMAGE_ROOTFS}/var/lib/smart"
+elif [ "$PMS" = "ipk" ]; then
+    if [ -z $OPKG_CONFFILE ]; then
+	export OPKG_CONFFILE="${IMAGE_ROOTFS}/etc/opkg.conf"
+    fi
+    if [ ! -f $OPKG_CONFFILE ]; then
+	echo "dest root /" > $OPKG_CONFFILE
+	echo "lists_dir ext /var/lib/opkg" >> $OPKG_CONFFILE 
+    fi
+    export OFLAGS="--force-postinstall --prefer-arch-to-version -t ${OPKG_TMP_DIR} -f ${OPKG_CONFFILE} -o ${IMAGE_ROOTFS}"    
+fi
+
 create_scripts
 
 ${FAKEROOT} -d
@@ -224,6 +251,7 @@ echo "Installing initial /dev directory"
 ${FAKEROOT} mkdir -p ${IMAGE_ROOTFS}/dev
 ${FAKEROOT} mkdir -p ${IMAGE_ROOTFS}/etc/opkg/arch
 ${FAKEROOT} mkdir -p ${IMAGE_ROOTFS}/etc/rpm
+${FAKEROOT} mkdir -p ${IMAGE_ROOTFS}/etc/rpm-postinsts
 ${FAKEROOT} mkdir -p ${IMAGE_ROOTFS}/install/tmp
 
 ${FAKEROOT} mkdir -p ${IMAGE_ROOTFS}/var/lib/opkg
@@ -266,7 +294,6 @@ set_lk_max_objects 16384
 # ================ Replication
 EOF
     fi	
-    export OFLAGS="--data-dir=${IMAGE_ROOTFS}/var/lib/smart"
   # Create database so that smart doesn't complain (lazy init)
   ${FAKEROOT} rpm --root ${IMAGE_ROOTFS} --dbpath $rpmlibdir -qa > /dev/null
   ${FAKEROOT} $PMC ${OFLAGS} config --set rpm-root=${IMAGE_ROOTFS}
@@ -279,18 +306,9 @@ EOF
   ${FAKEROOT} $PMC ${OFLAGS} config --set ignore-all-recommends=1
   ${FAKEROOT} $PMC ${OFLAGS} channel -y --add rpmsys type=rpm-sys name="Local RPM Database"
   ${FAKEROOT} $PMC ${OFLAGS} config --set rpm-extra-macros._cross_scriptlet_wrapper=${SCRIPTS}/scriptlet_wrapper
-
+  ${FAKEROOT} rpm --eval "%{_arch}-%{_vendor}-%{_os}%{?_gnu}" > ${IMAGE_ROOTFS}/etc/rpm/platform
+  ${FAKEROOT} echo ".*" >> ${IMAGE_ROOTFS}/etc/rpm/platform
   export RPM_ETCRPM=${IMAGE_ROOTFS}/etc/rpm
-
-elif [ "$PMS" = "ipk" ]; then
-  if [ -z $OPKG_CONFFILE ]; then
-      export OPKG_CONFFILE="${IMAGE_ROOTFS}/etc/opkg.conf"
-  fi
-  if [ ! -f $OPKG_CONFFILE ]; then
-      echo "dest root /" > $OPKG_CONFFILE
-      echo "lists_dir ext /var/lib/opkg" >> $OPKG_CONFFILE 
-  fi
-  export OFLAGS="--force-postinstall --prefer-arch-to-version -t ${OPKG_TMP_DIR} -f ${OPKG_CONFFILE} -o ${IMAGE_ROOTFS}"
 fi
 
 command -v makedevs >/dev/null 2>&1 || { echo "Cant find 'makedevs' in PATH. Aborting." >&2; exit 1; }
@@ -309,13 +327,14 @@ cat << EOF
 
 Welcome to interactive image creation sandbox
 You are now "root".
-
-NOTE: Setup environment you environment first.
----
-alias $PMC='$PMC \${OFLAGS}'
-
 How to Setup repositories (Only needed first time):
 --- 
+NOTE: Setup your environment first!
+alias $PMC='$PMC \${OFLAGS}'
+---
+EOF
+if [ "$PMS" = "rpm" ]; then
+    cat << EOF
 RPM: smartpm
 smart channel -y --add all type=rpm-md baseurl=http://downloads.yoctoproject.org/releases/yocto/yocto-1.4.2/rpm/all
 smart channel -y --add x86_64 type=rpm-md baseurl=http://downloads.yoctoproject.org/releases/yocto/yocto-1.4.2/rpm/x86_64
@@ -323,8 +342,10 @@ smart channel -y --add qemux86_64 type=rpm-md baseurl=http://downloads.yoctoproj
 smart channel -y --set all priority=1
 smart channel -y --set x86_64 priority=16
 smart channel -y --set qemux86_64 priority=21
-
-
+smart update
+EOF
+elif [ "$PMS" = "ipk" ]; then
+    cat << EOF
 IPK: opkg-cl
 echo "src/gz all http://downloads.yoctoproject.org/releases/yocto/yocto-1.4.2/ipk/all" > \
 ${OPKG_CONFFILE}
@@ -337,9 +358,15 @@ echo "arch any 6" >> ${OPKG_CONFFILE}
 echo "arch noarch 11" >> ${OPKG_CONFFILE}
 echo "arch x86_64 16" >> ${OPKG_CONFFILE}
 echo "arch qemux86_64 21" >> ${OPKG_CONFFILE}
-
+opkg-cl update
+EOF
+elif [ "$PMS" = "deb" ]; then
+cat << EOF
 DEB: TBD
+EOF
+fi
 
+cat << EOF
 Example usecases:
 
 1. Install new packages: 
@@ -360,11 +387,10 @@ Example usecases:
 # exit
 # kvm  -hda /home/dany/nameX.ext2 -kernel <kernel_dir>/arch/x86/boot/bzImage \
 -nographic -smp 1 -append " console=ttyS0 earlyprintk=serial  root=/dev/sda rw"
-
 EOF
 
 # Spawn the fakeroot
-${FAKEROOT} /bin/bash
+${FAKEROOT} /bin/sh
 
 # Install run-postinsts for failing pre/post hooks
 ${FAKEROOT} $PMC ${OFLAGS} install run-postinsts
