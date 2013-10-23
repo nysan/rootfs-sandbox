@@ -220,12 +220,6 @@ export OFFLINE_ROOT="${IMAGE_ROOTFS}"
 export IPKG_OFFLINE_ROOT="${IMAGE_ROOTFS}"
 
 ### END ENV ###
-#TEMPDIR=`mktemp -d`
-#wget -q -O $TEMPDIR/tmp $REPO_URL/?C=M;O=D
-#for repo in $(list_urls.sed $TEMPDIR/tmp | grep  '^[A-Za-z]'); do
-#    
-#
-#done
 
 mkdir -p ${SCRIPTS}
 
@@ -260,7 +254,7 @@ ${FAKEROOT} mkdir -p ${OPKG_TMP_DIR}/var/lib/pseudo
 if [ "$PMS" = "rpm" ]; then
     
     ${FAKEROOT} mkdir -p ${IMAGE_ROOTFS}/etc/rpm/sysinfo
-    ${FAKEROOT} echo "/" >${IMAGE_ROOTFS}/etc/rpm/sysinfo/Dirnames
+    ${FAKEROOT} echo "/" > ${IMAGE_ROOTFS}/etc/rpm/sysinfo/Dirnames
     ${FAKEROOT} mkdir -p ${IMAGE_ROOTFS}/$rpmlibdir
     ${FAKEROOT} mkdir -p ${IMAGE_ROOTFS}/$rpmlibdir/log
 
@@ -318,9 +312,6 @@ set +e
 ${FAKEROOT} makedevs -r ${IMAGE_ROOTFS} -D $DEVTABLE
 
 cd ${IMAGE_ROOTFS};
-#${FAKEROOT} $PMC ${OFLAGS} update
-#${FAKEROOT} $PMC ${OFLAGS} install packagegroup-core-boot
-#${FAKEROOT} $PMC ${OFLAGS} install opkg opkg-collateral
 
 set -e
 cat << EOF
