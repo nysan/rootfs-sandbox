@@ -20,7 +20,7 @@
 # TODO : 
 # 1: Allow sandbox usage of deb PMS
 # 2: do_vmdk, do_ext3 ?
-# 3: Automate the alias opkg-cl ${OFLAGS}
+# 3: Automate the alias $PMC ${OFLAGS}
 # 4: Fix INTERCEPT_DIR functionality.
 # 5. Fix missing shlibsign in nativesdk (nss).
 # 6. Remove host-native path to ensure no host-contamination when
@@ -383,9 +383,12 @@ EOF
 # Spawn the fakeroot
 ${FAKEROOT} /bin/sh
 
-# Install run-postinsts for failing pre/post hooks
-${FAKEROOT} $PMC ${OFLAGS} install run-postinsts
-
+# Install run-postinsts for failed pre/post hooks
+if [ "$PMS" = "rpm" ]; then
+    ${FAKEROOT} $PMC ${OFLAGS} install rpm-postinsts -y
+elif if [ "$PMS" = "ipk" ]; then
+    ${FAKEROOT} $PMC ${OFLAGS} install run-postinsts
+fi
 # Base time
 ${FAKEROOT} date "+%m%d%H%M%Y" > ${IMAGE_ROOTFS}/etc/timestamp
 
@@ -396,4 +399,5 @@ ${FAKEROOT} echo "nameserver 208.67.222.222" >> ${IMAGE_ROOTFS}/etc/resolv.conf
 sync
 
 ${FAKEROOT} -S
+
 exit 0
