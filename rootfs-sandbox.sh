@@ -39,7 +39,7 @@ export PSEUDO_NOSYMLINKEXP=1
 export PSEUDO_DISABLED=0
 export PSEUDO_UNLOAD=0
 export PSEUDO_DEBUG=0
-export FAKEROOT="pseudo"
+FAKEROOT="pseudo"
 
 export PYTHONIOENCODING="UTF-8"
 
@@ -238,31 +238,31 @@ fi
 
 create_scripts
 
-${FAKEROOT} -d
+$FAKEROOT -d
 
 echo "Installing initial /dev directory"
 
-${FAKEROOT} mkdir -p ${IMAGE_ROOTFS}/dev
-${FAKEROOT} mkdir -p ${IMAGE_ROOTFS}/etc/opkg/arch
-${FAKEROOT} mkdir -p ${IMAGE_ROOTFS}/etc/rpm
-${FAKEROOT} mkdir -p ${IMAGE_ROOTFS}/etc/rpm-postinsts
-${FAKEROOT} mkdir -p ${IMAGE_ROOTFS}/install/tmp
+$FAKEROOT mkdir -p ${IMAGE_ROOTFS}/dev
+$FAKEROOT mkdir -p ${IMAGE_ROOTFS}/etc/opkg/arch
+$FAKEROOT mkdir -p ${IMAGE_ROOTFS}/etc/rpm
+$FAKEROOT mkdir -p ${IMAGE_ROOTFS}/etc/rpm-postinsts
+$FAKEROOT mkdir -p ${IMAGE_ROOTFS}/install/tmp
 
-${FAKEROOT} mkdir -p ${IMAGE_ROOTFS}/var/lib/opkg
-${FAKEROOT} mkdir -p ${OPKG_TMP_DIR}/var/lib/pseudo
+$FAKEROOT mkdir -p ${IMAGE_ROOTFS}/var/lib/opkg
+$FAKEROOT mkdir -p ${OPKG_TMP_DIR}/var/lib/pseudo
 
 if [ "$PMS" = "rpm" ]; then
     
-    ${FAKEROOT} mkdir -p ${IMAGE_ROOTFS}/etc/rpm/sysinfo
-    ${FAKEROOT} echo "/" > ${IMAGE_ROOTFS}/etc/rpm/sysinfo/Dirnames
-    ${FAKEROOT} mkdir -p ${IMAGE_ROOTFS}/$rpmlibdir
-    ${FAKEROOT} mkdir -p ${IMAGE_ROOTFS}/$rpmlibdir/log
+    $FAKEROOT mkdir -p ${IMAGE_ROOTFS}/etc/rpm/sysinfo
+    $FAKEROOT echo "/" > ${IMAGE_ROOTFS}/etc/rpm/sysinfo/Dirnames
+    $FAKEROOT mkdir -p ${IMAGE_ROOTFS}/$rpmlibdir
+    $FAKEROOT mkdir -p ${IMAGE_ROOTFS}/$rpmlibdir/log
 
     # After change the __db.* cache size, log file will not be generated automatically,
     # that will raise some warnings, so touch a bare log for rpm write into it.
-    ${FAKEROOT} touch ${IMAGE_ROOTFS}/$rpmlibdir/log/log.0000000001
+    $FAKEROOT touch ${IMAGE_ROOTFS}/$rpmlibdir/log/log.0000000001
     if [ ! -e ${IMAGE_ROOTFS}/$rpmlibdir/DB_CONFIG ]; then
-        ${FAKEROOT} cat > ${IMAGE_ROOTFS}/$rpmlibdir/DB_CONFIG << EOF
+        $FAKEROOT cat > ${IMAGE_ROOTFS}/$rpmlibdir/DB_CONFIG << EOF
 # ================ Environment
 set_data_dir .
 set_create_dir .
@@ -289,19 +289,18 @@ set_lk_max_objects 16384
 EOF
     fi	
   # Create database so that smart doesn't complain (lazy init)
-  ${FAKEROOT} rpm --root ${IMAGE_ROOTFS} --dbpath $rpmlibdir -qa > /dev/null
-  ${FAKEROOT} $PMC ${OFLAGS} config --set rpm-root=${IMAGE_ROOTFS}
-  ${FAKEROOT} $PMC ${OFLAGS} config --set rpm-dbpath=$rpmlibdir
-  ${FAKEROOT} $PMC ${OFLAGS} config --set rpm-extra-macros._var=/var
-  ${FAKEROOT} $PMC ${OFLAGS} config --set rpm-extra-macros._tmppath=/install/tmp
+  $FAKEROOT rpm --root ${IMAGE_ROOTFS} --dbpath $rpmlibdir -qa > /dev/null
+  $FAKEROOT $PMC ${OFLAGS} config --set rpm-root=${IMAGE_ROOTFS}
+  $FAKEROOT $PMC ${OFLAGS} config --set rpm-dbpath=$rpmlibdir
+  $FAKEROOT $PMC ${OFLAGS} config --set rpm-extra-macros._var=/var
+  $FAKEROOT $PMC ${OFLAGS} config --set rpm-extra-macros._tmppath=/install/tmp
   # Write common configuration for host and target usage
-  ${FAKEROOT} $PMC ${OFLAGS} config --set rpm-nolinktos=1
-  ${FAKEROOT} $PMC ${OFLAGS} config --set rpm-noparentdirs=1
-  ${FAKEROOT} $PMC ${OFLAGS} config --set ignore-all-recommends=1
-  ${FAKEROOT} $PMC ${OFLAGS} channel -y --add rpmsys type=rpm-sys name="Local RPM Database"
-  ${FAKEROOT} $PMC ${OFLAGS} config --set rpm-extra-macros._cross_scriptlet_wrapper=${SCRIPTS}/scriptlet_wrapper
-  ${FAKEROOT} rpm --eval "%{_arch}-%{_vendor}-%{_os}%{?_gnu}" > ${IMAGE_ROOTFS}/etc/rpm/platform
-  ${FAKEROOT} echo ".*" >> ${IMAGE_ROOTFS}/etc/rpm/platform
+  $FAKEROOT $PMC ${OFLAGS} config --set rpm-nolinktos=1
+  $FAKEROOT $PMC ${OFLAGS} config --set rpm-noparentdirs=1
+  $FAKEROOT $PMC ${OFLAGS} config --set ignore-all-recommends=1
+  $FAKEROOT $PMC ${OFLAGS} config --set rpm-extra-macros._cross_scriptlet_wrapper=${SCRIPTS}/scriptlet_wrapper
+  $FAKEROOT rpm --eval "%{_arch}-%{_vendor}-%{_os}%{?_gnu}" > ${IMAGE_ROOTFS}/etc/rpm/platform
+  $FAKEROOT echo ".*" >> ${IMAGE_ROOTFS}/etc/rpm/platform
   export RPM_ETCRPM=${IMAGE_ROOTFS}/etc/rpm
 fi
 
@@ -309,13 +308,19 @@ command -v makedevs >/dev/null 2>&1 || { echo "Cant find 'makedevs' in PATH. Abo
 
 # Ignore exitcode
 set +e
-${FAKEROOT} makedevs -r ${IMAGE_ROOTFS} -D $DEVTABLE
+$FAKEROOT makedevs -r ${IMAGE_ROOTFS} -D $DEVTABLE
+set -e
+
+# Base time
+$FAKEROOT date "+%m%d%H%M%Y" > ${IMAGE_ROOTFS}/etc/timestamp
+
+# Add OpenDNS
+$FAKEROOT echo "nameserver 208.67.220.220" >> ${IMAGE_ROOTFS}/etc/resolv.conf
+$FAKEROOT echo "nameserver 208.67.222.222" >> ${IMAGE_ROOTFS}/etc/resolv.conf
 
 cd ${IMAGE_ROOTFS};
 
-set -e
 cat << EOF
-
 Welcome to interactive image creation sandbox
 You are now "root".
 How to Setup repositories (Only needed first time):
@@ -327,6 +332,7 @@ EOF
 if [ "$PMS" = "rpm" ]; then
     cat << EOF
 RPM: smartpm
+smart channel -y --add rpmsys type=rpm-sys name="Local RPM Database"
 smart channel -y --add all type=rpm-md baseurl=http://downloads.yoctoproject.org/releases/yocto/yocto-1.4.2/rpm/all
 smart channel -y --add x86_64 type=rpm-md baseurl=http://downloads.yoctoproject.org/releases/yocto/yocto-1.4.2/rpm/x86_64
 smart channel -y --add qemux86_64 type=rpm-md baseurl=http://downloads.yoctoproject.org/releases/yocto/yocto-1.4.2/rpm/qemux86_64
@@ -363,14 +369,17 @@ Example usecases:
 1. Install new packages: 
 # $PMC install packagegroup-core-boot gcc
 
-2. Install your own stuff:
+2. Install kernel images:
+# $PMC install "kernel-image*"
+
+3. Install your own stuff:
 # cd <source>; make install DESTDIR=\${IMAGE_ROOTFS}
 
-3. When done, create a tarball or ext2 FS
+4. When done, create a tarball or ext2 FS
 # do_tar.sh ~/my_rootfs
 # do_ext2.sh ~/my_rootfs
 
-4. Run with a different kernel
+5. Run with a custom kernel
 # cd <kernel_dir>
 # INSTALL_MOD_PATH=${IMAGE_ROOTFS} make modules_install
 # INSTALL_MOD_PATH=${IMAGE_ROOTFS} make firmware_install
@@ -381,23 +390,16 @@ Example usecases:
 EOF
 
 # Spawn the fakeroot
-${FAKEROOT} /bin/sh
+$FAKEROOT
 
 # Install run-postinsts for failed pre/post hooks
 if [ "$PMS" = "rpm" ]; then
-    ${FAKEROOT} $PMC ${OFLAGS} install rpm-postinsts -y
-elif if [ "$PMS" = "ipk" ]; then
-    ${FAKEROOT} $PMC ${OFLAGS} install run-postinsts
+    $FAKEROOT $PMC ${OFLAGS} install rpm-postinsts -y
+elif [ "$PMS" = "ipk" ]; then
+    $FAKEROOT $PMC ${OFLAGS} install run-postinsts
 fi
-# Base time
-${FAKEROOT} date "+%m%d%H%M%Y" > ${IMAGE_ROOTFS}/etc/timestamp
 
-# Add OpenDNS
-${FAKEROOT} echo "nameserver 208.67.220.220" >> ${IMAGE_ROOTFS}/etc/resolv.conf
-${FAKEROOT} echo "nameserver 208.67.222.222" >> ${IMAGE_ROOTFS}/etc/resolv.conf
-
-sync
-
-${FAKEROOT} -S
+# Kill the pseudo daemon
+$FAKEROOT -S
 
 exit 0
