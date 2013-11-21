@@ -143,7 +143,7 @@ Please customize ${OPKG_CONFFILE} to
 your liking before running the sandbox.
 
 Example: 
-$0 -r /tmp/rootfs ipk
+$0 -r /tmp/rootfs -p ipk
 
 OPTIONS:
    -r      Rootfs path
