@@ -165,6 +165,8 @@ if [ $# = 0 ]; then
     exit 1
 fi 
 
+rflag=false
+pflag=false
 while getopts "h?r:f:d:p:a:" opt; do
     case "$opt" in
     h|\?)
@@ -172,6 +174,7 @@ while getopts "h?r:f:d:p:a:" opt; do
         exit 0
         ;;
     r)  export IMAGE_ROOTFS=${OPTARG%/}
+        rflag=true
         ;;
     f)  export OPKG_CONFFILE=$OPTARG
         ;;
@@ -180,6 +183,7 @@ while getopts "h?r:f:d:p:a:" opt; do
     a)  REPO_URL=${OPTARG%/}
         ;;
     p)  
+        pflag=true
         if [ "$OPTARG" = "deb" ]; then
 	    echo "Only ipk & rpm supported sofar"
 	    exit
@@ -189,10 +193,16 @@ while getopts "h?r:f:d:p:a:" opt; do
 	elif [ "$OPTARG" = "ipk" ]; then
 	    export PMS="ipk"
 	    export PMC="opkg-cl"
+	else
+	    pflag=false
 	fi
         ;;    
     esac
 done
+if [ $rflag = false ] || [ $pflag = false ]; then
+    echo "Error: Options -r and -p are mandatory"
+    exit 0
+fi
 
 ### BEGIN ENV ###
 
