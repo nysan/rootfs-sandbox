@@ -151,6 +151,7 @@ OPTIONS:
    -r      Rootfs path
    -f      Select custom opkg configuration file
    -d      Use this makedevs devicetable instead of default
+   -a      Set Repository URL
    -p      ipk|deb|rpm
    -v      Verbose mode
 EOF
@@ -188,7 +189,7 @@ while getopts "h?r:f:d:p:a:" opt; do
         pflag=true
         if [ "$OPTARG" = "deb" ]; then
 	    echo "Only ipk & rpm supported sofar"
-	    exit
+	    exit 1
 	elif [ "$OPTARG" = "rpm" ]; then
 	    export PMS="rpm"
 	    export PMC="smart"
@@ -299,20 +300,21 @@ set_lk_max_objects 16384
 
 # ================ Replication
 EOF
-    fi	
-  # Create database so that smart doesn't complain (lazy init)
-  $FAKEROOT rpm --root ${IMAGE_ROOTFS} --dbpath $rpmlibdir -qa > /dev/null
-  $FAKEROOT $PMC ${OFLAGS} config --set rpm-root=${IMAGE_ROOTFS}
-  $FAKEROOT $PMC ${OFLAGS} config --set rpm-dbpath=$rpmlibdir
-  $FAKEROOT $PMC ${OFLAGS} config --set rpm-extra-macros._var=/var
-  $FAKEROOT $PMC ${OFLAGS} config --set rpm-extra-macros._tmppath=/install/tmp
-  # Write common configuration for host and target usage
-  $FAKEROOT $PMC ${OFLAGS} config --set rpm-nolinktos=1
-  $FAKEROOT $PMC ${OFLAGS} config --set rpm-noparentdirs=1
-  $FAKEROOT $PMC ${OFLAGS} config --set ignore-all-recommends=1
-  $FAKEROOT $PMC ${OFLAGS} config --set rpm-extra-macros._cross_scriptlet_wrapper=${SCRIPTS}/scriptlet_wrapper
-  $FAKEROOT rpm --eval "%{_arch}-%{_vendor}-%{_os}%{?_gnu}" > ${IMAGE_ROOTFS}/etc/rpm/platform
-  $FAKEROOT echo ".*" >> ${IMAGE_ROOTFS}/etc/rpm/platform
+
+    # Create database so that smart doesn't complain (lazy init)
+    $FAKEROOT rpm --root ${IMAGE_ROOTFS} --dbpath $rpmlibdir -qa > /dev/null
+    $FAKEROOT $PMC ${OFLAGS} config --set rpm-root=${IMAGE_ROOTFS}
+    $FAKEROOT $PMC ${OFLAGS} config --set rpm-dbpath=$rpmlibdir
+    $FAKEROOT $PMC ${OFLAGS} config --set rpm-extra-macros._var=/var
+    $FAKEROOT $PMC ${OFLAGS} config --set rpm-extra-macros._tmppath=/install/tmp
+    # Write common configuration for host and target usage
+    $FAKEROOT $PMC ${OFLAGS} config --set rpm-nolinktos=1
+    $FAKEROOT $PMC ${OFLAGS} config --set rpm-noparentdirs=1
+    $FAKEROOT $PMC ${OFLAGS} config --set ignore-all-recommends=1
+    $FAKEROOT $PMC ${OFLAGS} config --set rpm-extra-macros._cross_scriptlet_wrapper=${SCRIPTS}/scriptlet_wrapper
+    $FAKEROOT rpm --eval "%{_arch}-%{_vendor}-%{_os}%{?_gnu}" > ${IMAGE_ROOTFS}/etc/rpm/platform
+    $FAKEROOT echo ".*" >> ${IMAGE_ROOTFS}/etc/rpm/platform
+  fi	
   export RPM_ETCRPM=${IMAGE_ROOTFS}/etc/rpm
 fi
 
