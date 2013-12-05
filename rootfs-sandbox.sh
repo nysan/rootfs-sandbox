@@ -46,6 +46,8 @@ export PYTHONIOENCODING="UTF-8"
 DEVTABLE="${OECORE_NATIVE_SYSROOT}/usr/share/device_table-minimal.txt"
 ORIGDIR=$(pwd)
 rpmlibdir="/var/lib/rpm"
+export REPO_URL="http://downloads.yoctoproject.org/releases/yocto/yocto-1.5"
+
 
 ### Define helper functions ###
 create_scripts()
@@ -343,9 +345,9 @@ if [ "$PMS" = "rpm" ]; then
     cat << EOF
 RPM: smartpm
 smart channel -y --add rpmsys type=rpm-sys name="Local RPM Database"
-smart channel -y --add all type=rpm-md baseurl=http://downloads.yoctoproject.org/releases/yocto/yocto-1.4.2/rpm/all
-smart channel -y --add x86_64 type=rpm-md baseurl=http://downloads.yoctoproject.org/releases/yocto/yocto-1.4.2/rpm/x86_64
-smart channel -y --add qemux86_64 type=rpm-md baseurl=http://downloads.yoctoproject.org/releases/yocto/yocto-1.4.2/rpm/qemux86_64
+smart channel -y --add all type=rpm-md baseurl=${REPO_URL}/rpm/all
+smart channel -y --add x86_64 type=rpm-md baseurl=${REPO_URL}/rpm/x86_64
+smart channel -y --add qemux86_64 type=rpm-md baseurl=${REPO_URL}/rpm/qemux86_64
 smart channel -y --set all priority=1
 smart channel -y --set x86_64 priority=16
 smart channel -y --set qemux86_64 priority=21
@@ -354,11 +356,11 @@ EOF
 elif [ "$PMS" = "ipk" ]; then
     cat << EOF
 IPK: opkg-cl
-echo "src/gz all http://downloads.yoctoproject.org/releases/yocto/yocto-1.4.2/ipk/all" > \
+echo "src/gz all ${REPO_URL}/ipk/all" > \
 ${OPKG_CONFFILE}
-echo "src/gz x86_64 http://downloads.yoctoproject.org/releases/yocto/yocto-1.4.2/ipk/x86_64" >> \
+echo "src/gz x86_64 ${REPO_URL}/ipk/x86_64" >> \
 ${OPKG_CONFFILE}
-echo "src/gz qemux86_64 http://downloads.yoctoproject.org/releases/yocto/yocto-1.4.2/ipk/qemux86_64" >> \
+echo "src/gz qemux86_64 ${REPO_URL}/ipk/qemux86_64" >> \
 ${OPKG_CONFFILE}
 echo "arch all 1" >> ${OPKG_CONFFILE}
 echo "arch any 6" >> ${OPKG_CONFFILE}
@@ -404,7 +406,7 @@ $FAKEROOT
 
 # Install run-postinsts for failed pre/post hooks
 if [ "$PMS" = "rpm" ]; then
-    $FAKEROOT $PMC ${OFLAGS} install rpm-postinsts -y
+    $FAKEROOT $PMC ${OFLAGS} install run-postinsts -y
 elif [ "$PMS" = "ipk" ]; then
     $FAKEROOT $PMC ${OFLAGS} install run-postinsts
 fi
