@@ -145,13 +145,15 @@ Please customize ${OPKG_CONFFILE} to
 your liking before running the sandbox.
 
 Example: 
-$0 -r /tmp/rootfs -p ipk
+$0 -r /tmp/rootfs -p ipk -a x86_64 -b qemux86_64
 
 OPTIONS:
    -r      Rootfs path
+   -a      Architeture (x86-64, ppce500v2 et.c.)
+   -b      BSP (qemux86_64, p1022ds et.c.)
    -f      Select custom opkg configuration file
    -d      Use this makedevs devicetable instead of default
-   -a      Set Repository URL
+   -u      Set Repository URL
    -p      ipk|deb|rpm
    -v      Verbose mode
 EOF
@@ -170,7 +172,12 @@ fi
 
 rflag=false
 pflag=false
-while getopts "h?r:f:d:p:a:" opt; do
+
+# Set sane default
+export T_ARCH="x86_64"
+export T_BSP="qemux86_64"
+
+while getopts "h?r:f:d:p:u:a:b:" opt; do
     case "$opt" in
     h|\?)
         show_help
@@ -179,11 +186,15 @@ while getopts "h?r:f:d:p:a:" opt; do
     r)  export IMAGE_ROOTFS=${OPTARG%/}
         rflag=true
         ;;
+    a)  export T_ARCH=$OPTARG
+        ;;
+    b)  export T_BSP=$OPTARG
+        ;;
     f)  export OPKG_CONFFILE=$OPTARG
         ;;
     d)  DEVTABLE=$OPTARG
         ;;
-    a)  REPO_URL=${OPTARG%/}
+    u)  REPO_URL=${OPTARG%/}
         ;;
     p)  
         pflag=true
@@ -348,11 +359,11 @@ if [ "$PMS" = "rpm" ]; then
 RPM: smartpm
 smart channel -y --add rpmsys type=rpm-sys name="Local RPM Database"
 smart channel -y --add all type=rpm-md baseurl=${REPO_URL}/rpm/all
-smart channel -y --add x86_64 type=rpm-md baseurl=${REPO_URL}/rpm/x86_64
-smart channel -y --add qemux86_64 type=rpm-md baseurl=${REPO_URL}/rpm/qemux86_64
+smart channel -y --add ${T_ARCH} type=rpm-md baseurl=${REPO_URL}/rpm/${T_ARCH}
+smart channel -y --add ${T_BSP} type=rpm-md baseurl=${REPO_URL}/rpm/${T_BSP}
 smart channel -y --set all priority=1
-smart channel -y --set x86_64 priority=16
-smart channel -y --set qemux86_64 priority=21
+smart channel -y --set ${T_ARCH} priority=16
+smart channel -y --set ${T_BSP} priority=21
 smart update
 EOF
 elif [ "$PMS" = "ipk" ]; then
@@ -360,15 +371,15 @@ elif [ "$PMS" = "ipk" ]; then
 IPK: opkg-cl
 echo "src/gz all ${REPO_URL}/ipk/all" > \
 ${OPKG_CONFFILE}
-echo "src/gz x86_64 ${REPO_URL}/ipk/x86_64" >> \
+echo "src/gz ${T_ARCH} ${REPO_URL}/ipk/${T_ARCH}" >> \
 ${OPKG_CONFFILE}
-echo "src/gz qemux86_64 ${REPO_URL}/ipk/qemux86_64" >> \
+echo "src/gz ${T_BSP} ${REPO_URL}/ipk/${T_BSP}" >> \
 ${OPKG_CONFFILE}
 echo "arch all 1" >> ${OPKG_CONFFILE}
 echo "arch any 6" >> ${OPKG_CONFFILE}
 echo "arch noarch 11" >> ${OPKG_CONFFILE}
-echo "arch x86_64 16" >> ${OPKG_CONFFILE}
-echo "arch qemux86_64 21" >> ${OPKG_CONFFILE}
+echo "arch ${T_ARCH} 16" >> ${OPKG_CONFFILE}
+echo "arch ${T_BSP} 21" >> ${OPKG_CONFFILE}
 opkg-cl update
 EOF
 elif [ "$PMS" = "deb" ]; then
