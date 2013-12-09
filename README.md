@@ -10,3 +10,6 @@ image of your choice when done.
 Make sure to install package "run-postinsts", this will ensure
 that all postinstalls which fail during offline rootfs assembly
 will be run at first boot.
+
+Send patches to david.c.nystrom@gmail.com, or get a github account
+and ping me to get contributor access.
