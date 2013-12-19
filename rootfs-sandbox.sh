@@ -142,11 +142,22 @@ show_help() {
     cat << EOF
 Usage: $0 -r <rootfs_path> -p <ipk|rpm|deb>
 
-Please customize ${OPKG_CONFFILE} to
-your liking before running the sandbox.
+The -s sysroot options help you expand your toolchain
+sysroot, if you have any missing libs.
+
+If you get postinstall failures, please make sure you 
+have "run-postinsts" installed, which will run your failed 
+postinstall hook at first boot.
 
 Example: 
+# Create a runnable target rootfs
 $0 -r /tmp/rootfs -p ipk -a x86_64 -b qemux86_64
+
+# Expand your nativesdk sysroot
+$0 -r /opt/poky/1.5/sysroots/x86_64-pokysdk-linux/ -p rpm -a x86_64_nativesdk  -s
+
+# Expand your target sysroot
+$0 -r /opt/poky/1.5/sysroots/x86_64-poky-linux/ -p rpm -a x86_64 -b qemux86_64  -s
 
 OPTIONS:
    -r      Rootfs path
@@ -155,6 +166,7 @@ OPTIONS:
    -f      Select custom opkg configuration file
    -d      Use this makedevs devicetable instead of default
    -u      Set Repository URL
+   -s      This is a sysroot, i.e. dont run postinstall hooks.
    -p      ipk|deb|rpm
    -v      Verbose mode
 EOF
@@ -178,7 +190,7 @@ pflag=false
 export T_ARCH="x86_64"
 export T_BSP="qemux86_64"
 
-while getopts "h?r:f:d:p:u:a:b:" opt; do
+while getopts "h?r:f:d:p:u:a:b:s" opt; do
     case "$opt" in
     h|\?)
         show_help
@@ -189,9 +201,11 @@ while getopts "h?r:f:d:p:u:a:b:" opt; do
         ;;
     a)  export T_ARCH=$OPTARG
         ;;
+    s)  export IS_SYSROOT="1"
+        ;;
     b)  export T_BSP=$OPTARG
         ;;
-    f)  export OPKG_CONFFILE=$OPTARG
+    f)  OPKG_CONFFILE=$OPTARG
         ;;
     d)  DEVTABLE=$OPTARG
         ;;
@@ -258,7 +272,12 @@ elif [ "$PMS" = "ipk" ]; then
 	echo "dest root /" > $OPKG_CONFFILE
 	echo "lists_dir ext /var/lib/opkg" >> $OPKG_CONFFILE 
     fi
-    export OFLAGS="--force-postinstall --prefer-arch-to-version -t ${OPKG_TMP_DIR} -f ${OPKG_CONFFILE} -o ${IMAGE_ROOTFS}"    
+    
+    if [ -z ${IS_SYSROOT} ]; then
+	export OFLAGS="--force-postinstall --prefer-arch-to-version -t ${OPKG_TMP_DIR} -f ${OPKG_CONFFILE} -o ${IMAGE_ROOTFS}"
+    else
+	export OFLAGS="--prefer-arch-to-version -t ${OPKG_TMP_DIR} -f ${OPKG_CONFFILE} -o ${IMAGE_ROOTFS}"
+    fi
 fi
 
 create_scripts
@@ -276,11 +295,13 @@ $FAKEROOT mkdir -p ${IMAGE_ROOTFS}/install/tmp
 $FAKEROOT mkdir -p ${IMAGE_ROOTFS}/var/lib/opkg
 $FAKEROOT mkdir -p ${OPKG_TMP_DIR}/var/lib/pseudo
 
-if [ "$PMS" = "rpm" ]; then
-    
+if [ "$PMS" = "rpm" ]; then    
     $FAKEROOT mkdir -p ${IMAGE_ROOTFS}/etc/rpm/sysinfo
     $FAKEROOT echo "/" > ${IMAGE_ROOTFS}/etc/rpm/sysinfo/Dirnames
     $FAKEROOT mkdir -p ${IMAGE_ROOTFS}/$rpmlibdir
+    if [ ! -z ${IS_SYSROOT} ]; then
+	$FAKEROOT rm -fr ${IMAGE_ROOTFS}/$rpmlibdir/*
+    fi
     $FAKEROOT mkdir -p ${IMAGE_ROOTFS}/$rpmlibdir/log
 
     # After change the __db.* cache size, log file will not be generated automatically,
@@ -308,7 +329,7 @@ set_mp_mmapsize 268435456
 set_lk_max_locks 16384
 set_lk_max_lockers 16384
 set_lk_max_objects 16384
- mutex_set_max 163840
+mutex_set_max 163840
 
 # ================ Replication
 EOF
@@ -319,13 +340,17 @@ EOF
     $FAKEROOT $PMC ${OFLAGS} config --set rpm-dbpath=$rpmlibdir
     $FAKEROOT $PMC ${OFLAGS} config --set rpm-extra-macros._var=/var
     $FAKEROOT $PMC ${OFLAGS} config --set rpm-extra-macros._tmppath=/install/tmp
+
     # Write common configuration for host and target usage
     $FAKEROOT $PMC ${OFLAGS} config --set rpm-nolinktos=1
-    $FAKEROOT $PMC ${OFLAGS} config --set rpm-noparentdirs=1
     $FAKEROOT $PMC ${OFLAGS} config --set ignore-all-recommends=1
     $FAKEROOT $PMC ${OFLAGS} config --set rpm-extra-macros._cross_scriptlet_wrapper=${SCRIPTS}/scriptlet_wrapper
     $FAKEROOT rpm --eval "%{_arch}-%{_vendor}-%{_os}%{?_gnu}" > ${IMAGE_ROOTFS}/etc/rpm/platform
     $FAKEROOT echo ".*" >> ${IMAGE_ROOTFS}/etc/rpm/platform
+    if [ ! -z ${IS_SYSROOT} ]; then
+	$FAKEROOT $PMC ${OFLAGS} config --set rpm-noscripts=1
+    fi
+
   fi	
   export RPM_ETCRPM=${IMAGE_ROOTFS}/etc/rpm
 fi
@@ -419,10 +444,12 @@ EOF
 $FAKEROOT
 
 # Install run-postinsts for failed pre/post hooks
-if [ "$PMS" = "rpm" ]; then
-    $FAKEROOT $PMC ${OFLAGS} install run-postinsts -y
-elif [ "$PMS" = "ipk" ]; then
-    $FAKEROOT $PMC ${OFLAGS} install run-postinsts
+if [ ! -z ${IS_SYSROOT} ]; then
+    if [ "$PMS" = "rpm" ]; then
+	$FAKEROOT $PMC ${OFLAGS} install run-postinsts -y
+    elif [ "$PMS" = "ipk" ]; then
+	$FAKEROOT $PMC ${OFLAGS} install run-postinsts
+    fi
 fi
 
 # Kill the pseudo daemon
