@@ -15,7 +15,8 @@
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
 # An Openembedded rootfs-sandbox intended for use with the 
-# meta-toolchain SDK tarball provided with a OE based distro. 
+# meta-toolchain SDK tarball provided with a OE based distro.
+# Uses a remote or local package repostitory for rootfs configuration. 
 
 # TODO : 
 # 1: Allow sandbox usage of deb PMS
