@@ -16,16 +16,17 @@
 
 # An Openembedded rootfs-sandbox intended for use with the 
 # meta-toolchain SDK tarball provided with a OE based distro.
-# Uses a remote or local package repostitory for rootfs configuration. 
+# Uses a remote or local package repository for rootfs configuration. 
 
 # TODO : 
-# 1: Allow sandbox usage of deb PMS
-# 2: do_vmdk, do_ext3 ?
-# 3: Automate the alias $PMC ${OFLAGS}
-# 4: Fix missing shlibsign in nativesdk (nss).
-# 5: Reset RPM DB rootfs path to / before creating the rootfs tarball.
-# 6: Remove host-native path to ensure no host-contamination when
+# 1: Automate the alias $PMC ${OFLAGS}
+# 2: Fix missing shlibsign in nativesdk (nss).
+# 3: Reset RPM DB rootfs path to / before creating the rootfs tarball. Not working.
+# 4: Remove host-native path to ensure no host-contamination when
 #    All needed items are added to nativesdk.
+# 5: Fix extesion of nativesdk and target sysroots with RPM. Not working.
+# 20: do_vmdk, do_ext3 ?
+# 999: Allow sandbox usage of deb PMS
  
 ### Set ENV ###
 export INTERCEPT_DIR="${OECORE_NATIVE_SYSROOT}/usr/share/postinst-intercept"
@@ -42,6 +43,7 @@ export PSEUDO_UNLOAD=0
 export PSEUDO_DEBUG=0
 FAKEROOT="pseudo"
 
+# Needed by qemuwrapper and postinstall intercepts
 export datadir="/usr/share"
 export includedir="/usr/include"
 export libdir="/usr/lib"
