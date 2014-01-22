@@ -22,13 +22,13 @@
 # 1: Allow sandbox usage of deb PMS
 # 2: do_vmdk, do_ext3 ?
 # 3: Automate the alias $PMC ${OFLAGS}
-# 4: Fix INTERCEPT_DIR functionality.
-# 5. Fix missing shlibsign in nativesdk (nss).
-# 6. Remove host-native path to ensure no host-contamination when
+# 4: Fix missing shlibsign in nativesdk (nss).
+# 5: Reset RPM DB rootfs path to / before creating the rootfs tarball.
+# 6: Remove host-native path to ensure no host-contamination when
 #    All needed items are added to nativesdk.
  
 ### Set ENV ###
-export INTERCEPT_DIR="${OECORE_NATIVE_SYSROOT}/usr/share/opkg/intercept"
+export INTERCEPT_DIR="${OECORE_NATIVE_SYSROOT}/usr/share/postinst-intercept"
 
 # Setup pseduo environment
 export PSEUDO_BINDIR=${OECORE_NATIVE_SYSROOT}/bin
@@ -41,6 +41,14 @@ export PSEUDO_DISABLED=0
 export PSEUDO_UNLOAD=0
 export PSEUDO_DEBUG=0
 FAKEROOT="pseudo"
+
+export datadir="/usr/share"
+export includedir="/usr/include"
+export libdir="/usr/lib"
+export base_libdir="/lib"
+export bindir="/usr/bin"
+export base_bindir="/bin"
+export sysconfdir="/etc"
 
 export PYTHONIOENCODING="UTF-8"
 
@@ -147,21 +155,22 @@ sysroot, if you have any missing libs.
 
 If you get postinstall failures, please make sure you 
 have "run-postinsts" installed, which will run your failed 
-postinstall hook at first boot.
+postinstall hooks at first boot.
 
 Example: 
 # Create a runnable target rootfs
 $0 -r /tmp/rootfs -p ipk -a x86_64 -b qemux86_64
 
 # Expand your nativesdk sysroot
-$0 -r /opt/poky/1.5/sysroots/x86_64-pokysdk-linux/ -p rpm -a x86_64_nativesdk  -s
+$0 -r /opt/poky/1.5/sysroots/x86_64-pokysdk-linux/ -p ipk -a x86_64_nativesdk  -s
 
 # Expand your target sysroot
-$0 -r /opt/poky/1.5/sysroots/x86_64-poky-linux/ -p rpm -a x86_64 -b qemux86_64  -s
+$0 -r /opt/poky/1.5/sysroots/x86_64-poky-linux/ -p ipk -a x86_64 -b qemux86_64  -s
+$0 -r /opt/poky/1.5/sysroots/ppce500v2-oel-linux-gnuspe/ -p ipk -a ppce500v2 -b p1025twr -s -u file:///media/sdb5/poky/build/tmp/deploy/
 
 OPTIONS:
    -r      Rootfs path
-   -a      Architeture (x86-64, ppce500v2 et.c.)
+   -a      Architecture (x86-64, ppce500v2 et.c.)
    -b      BSP (qemux86_64, p1022ds et.c.)
    -f      Select custom opkg configuration file
    -d      Use this makedevs devicetable instead of default
@@ -241,7 +250,7 @@ export SCRIPTS="${IMAGE_ROOTFS}-tmp/scripts"
 
 # Use targets "special" update-rc.d + shadow utils + makedevs
 export PATH="${SCRIPTS}:${OECORE_NATIVE_SYSROOT}/usr/sbin:${OECORE_TARGET_SYSROOT}/usr/sbin:${PATH}"
-export PATH="${OECORE_NATIVE_SYSROOT}/sbin:${PATH}"
+export PATH="${OECORE_NATIVE_SYSROOT}/sbin:${OECORE_NATIVE_SYSROOT}/usr/bin/crossscripts:${PATH}"
 #python path
 export PATH="${OECORE_NATIVE_SYSROOT}/usr/bin:${PATH}"
 
@@ -261,6 +270,7 @@ export IPKG_OFFLINE_ROOT="${IMAGE_ROOTFS}"
 ### END ENV ###
 
 mkdir -p ${SCRIPTS}
+mkdir -p ${INTERCEPT_DIR}
 
 if [ "$PMS" = "rpm" ]; then
     export OFLAGS="--data-dir=${IMAGE_ROOTFS}/var/lib/smart"
