@@ -29,7 +29,7 @@
 # 999: Allow sandbox usage of deb PMS
  
 ### Set ENV ###
-export INTERCEPT_DIR="${OECORE_NATIVE_SYSROOT}/usr/share/postinst-intercept"
+export INTERCEPT_DIR="${OECORE_NATIVE_SYSROOT}/usr/share/postinst-intercepts"
 
 # Setup pseduo environment
 export PSEUDO_BINDIR=${OECORE_NATIVE_SYSROOT}/bin
