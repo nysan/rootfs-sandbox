@@ -18,14 +18,13 @@
 # meta-toolchain SDK tarball provided with a OE based distro.
 # Uses a remote or local package repository for rootfs configuration. 
 
-# TODO : 
-# 1: Automate the alias $PMC ${OFLAGS}
-# 2: Fix missing shlibsign in nativesdk (nss).
-# 3: Reset RPM DB rootfs path to / before creating the rootfs tarball. Not working.
-# 4: Remove host-native path to ensure no host-contamination when
+# TODO :
+# 1: Fix missing shlibsign in nativesdk (nss).
+# 2: Reset RPM DB rootfs path to / before creating the rootfs tarball. Not working.
+# 3: Remove host-native path to ensure no host-contamination when
 #    All needed items are added to nativesdk.
-# 5: Fix extesion of nativesdk and target sysroots with RPM. Not working.
-# 20: do_vmdk, do_ext3 ?
+# 4: Fix extesion of nativesdk and target sysroots with RPM. Not working.
+# 20: do_vmdk, do_ext3 or do_it_yourself ?
 # 999: Allow sandbox usage of deb PMS
  
 ### Set ENV ###
@@ -92,6 +91,19 @@ if [ \$? -ne 0 ]; then
 fi
 EOF
 	chmod 755 ${SCRIPTS}/scriptlet_wrapper
+
+	cat << EOF > ${SCRIPTS}/opkg-cl
+#!/bin/sh
+${OECORE_NATIVE_SYSROOT}/usr/bin/opkg-cl ${OFLAGS} "\$@"
+EOF
+	chmod 755 ${SCRIPTS}/opkg-cl
+
+	cat << EOF > ${SCRIPTS}/smart
+#!/bin/sh
+${OECORE_NATIVE_SYSROOT}/usr/bin/smart ${OFLAGS} "\$@"
+EOF
+	chmod 755 ${SCRIPTS}/smart
+
 
 # Create devmodwrapper dummy script
     if [ ! -f ${SCRIPTS}/depmodwrapper ] ; then
@@ -251,10 +263,10 @@ export OPKG_TMP_DIR="${IMAGE_ROOTFS}-tmp"
 export SCRIPTS="${IMAGE_ROOTFS}-tmp/scripts"
 
 # Use targets "special" update-rc.d + shadow utils + makedevs
-export PATH="${SCRIPTS}:${OECORE_NATIVE_SYSROOT}/usr/sbin:${OECORE_TARGET_SYSROOT}/usr/sbin:${PATH}"
+export PATH="${OECORE_NATIVE_SYSROOT}/usr/sbin:${OECORE_TARGET_SYSROOT}/usr/sbin:${PATH}"
 export PATH="${OECORE_NATIVE_SYSROOT}/sbin:${OECORE_NATIVE_SYSROOT}/usr/bin/crossscripts:${PATH}"
 #python path
-export PATH="${OECORE_NATIVE_SYSROOT}/usr/bin:${PATH}"
+export PATH="${SCRIPTS}:${OECORE_NATIVE_SYSROOT}/usr/bin:${PATH}"
 
 export PSEUDO_LOCALSTATEDIR="${IMAGE_ROOTFS}-tmp/var/lib/pseudo"
 
@@ -387,10 +399,7 @@ cat << EOF
 Welcome to interactive image creation sandbox
 You are now "root".
 How to Setup repositories (Only needed first time):
---- 
-NOTE: Setup your environment first!
-alias $PMC='$PMC \${OFLAGS}'
----
+
 EOF
 if [ "$PMS" = "rpm" ]; then
     cat << EOF
