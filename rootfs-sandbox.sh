@@ -95,12 +95,18 @@ EOF
 	cat << EOF > ${SCRIPTS}/opkg-cl
 #!/bin/sh
 ${OECORE_NATIVE_SYSROOT}/usr/bin/opkg-cl ${OFLAGS} "\$@"
+if [ \$? -ne 0 ]; then
+    ${OECORE_NATIVE_SYSROOT}/usr/bin/opkg-cl ${OFLAGS} install run-postinsts >/dev/null 2>&1
+fi
 EOF
 	chmod 755 ${SCRIPTS}/opkg-cl
 
 	cat << EOF > ${SCRIPTS}/smart
 #!/bin/sh
 ${OECORE_NATIVE_SYSROOT}/usr/bin/smart ${OFLAGS} "\$@"
+if [ \$? -ne 0 ]; then
+    ${OECORE_NATIVE_SYSROOT}/usr/bin/opkg-cl ${OFLAGS} install -y run-postinsts >/dev/null 2>&1
+fi
 EOF
 	chmod 755 ${SCRIPTS}/smart
 
@@ -174,6 +180,7 @@ postinstall hooks at first boot.
 Example: 
 # Create a runnable target rootfs
 $0 -r /tmp/rootfs -p ipk -a x86_64 -b qemux86_64
+$0 -r /tmp/rootfs -p ipk -a ppce500v2 -b p1025twr -u file:///media/sdb5/poky/build/tmp/deploy/
 
 # Expand your nativesdk sysroot
 $0 -r /opt/poky/1.5/sysroots/x86_64-pokysdk-linux/ -p ipk -a x86_64_nativesdk  -s
@@ -298,7 +305,7 @@ elif [ "$PMS" = "ipk" ]; then
     fi
     
     if [ -z ${IS_SYSROOT} ]; then
-	export OFLAGS="--force-postinstall --prefer-arch-to-version -t ${OPKG_TMP_DIR} -f ${OPKG_CONFFILE} -o ${IMAGE_ROOTFS}"
+	export OFLAGS="--force-postinstall --no-install-recommends --prefer-arch-to-version -t ${OPKG_TMP_DIR} -f ${OPKG_CONFFILE} -o ${IMAGE_ROOTFS}"
     else
 	export OFLAGS="--prefer-arch-to-version -t ${OPKG_TMP_DIR} -f ${OPKG_CONFFILE} -o ${IMAGE_ROOTFS}"
     fi
@@ -438,20 +445,23 @@ fi
 cat << EOF
 Example usecases:
 
-1. Install new packages: 
+1. List options
+# $PMC --help
+
+2. Install new packages: 
 # $PMC install packagegroup-core-boot gcc
 
-2. Install kernel images:
-# $PMC install "kernel-image*"
+3. Install kernel dtb&image and u-boot:
+# $PMC install u-boot-images kernel-devicetree kernel-3.4.10...
 
-3. Install your own stuff:
+4. Install your own stuff:
 # cd <source>; make install DESTDIR=\${IMAGE_ROOTFS}
 
-4. When done, create a tarball or ext2 FS
+5. When done, create a tarball or ext2 FS
 # do_tar.sh ~/my_rootfs
 # do_ext2.sh ~/my_rootfs
 
-5. Run with a custom kernel
+6. Run with a custom kernel
 # cd <kernel_dir>
 # INSTALL_MOD_PATH=${IMAGE_ROOTFS} make modules_install
 # INSTALL_MOD_PATH=${IMAGE_ROOTFS} make firmware_install
@@ -463,15 +473,6 @@ EOF
 
 # Spawn the fakeroot
 $FAKEROOT
-
-# Install run-postinsts for failed pre/post hooks
-if [ ! -z ${IS_SYSROOT} ]; then
-    if [ "$PMS" = "rpm" ]; then
-	$FAKEROOT $PMC ${OFLAGS} install run-postinsts -y
-    elif [ "$PMS" = "ipk" ]; then
-	$FAKEROOT $PMC ${OFLAGS} install run-postinsts
-    fi
-fi
 
 # Kill the pseudo daemon
 $FAKEROOT -S
