@@ -287,11 +287,13 @@ export D="${IMAGE_ROOTFS}"
 # Old Legacy, to be removed ?
 export OFFLINE_ROOT="${IMAGE_ROOTFS}"
 export IPKG_OFFLINE_ROOT="${IMAGE_ROOTFS}"
-
+SDIR="$( cd "$( dirname "$0" )" && pwd )"
 ### END ENV ###
 
 mkdir -p ${SCRIPTS}
-mkdir -p ${INTERCEPT_DIR}
+if [ ! -d ${INTERCEPT_DIR} ]; then
+    cp -fr $SDIR/postinst-intercepts ${INTERCEPT_DIR}
+fi
 
 if [ "$PMS" = "rpm" ]; then
     export OFLAGS="--data-dir=${IMAGE_ROOTFS}/var/lib/smart"
