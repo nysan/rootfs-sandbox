@@ -291,9 +291,6 @@ SDIR="$( cd "$( dirname "$0" )" && pwd )"
 ### END ENV ###
 
 mkdir -p ${SCRIPTS}
-if [ ! -d ${INTERCEPT_DIR} ]; then
-    cp -fr $SDIR/postinst-intercepts ${INTERCEPT_DIR}
-fi
 
 if [ "$PMS" = "rpm" ]; then
     export OFLAGS="--data-dir=${IMAGE_ROOTFS}/var/lib/smart"
